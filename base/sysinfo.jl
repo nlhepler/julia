@@ -9,7 +9,10 @@ export  CPU_CORES,
         uptime,
         loadavg,
         free_memory,
-        total_memory
+        total_memory,
+        shlib_ext,
+        find_library,
+        LIBRARY_PATH
 
 import ..Base: WORD_SIZE, OS_NAME, ARCH, MACHINE, UV_error_t
 import ..Base: show, repl_show
@@ -128,6 +131,36 @@ end
 free_memory() = ccall(:uv_get_free_memory, Uint64, ())
 total_memory() = ccall(:uv_get_total_memory, Uint64, ())
 
+if OS_NAME == :Darwin
+    const shlib_ext = "dylib"
+elseif OS_NAME == :Windows
+    const shlib_ext = "dll"
+else
+    #assume OS_NAME == :Linux, or similar
+    const shlib_ext = "so"
+end
 
+const DL_LOAD_PATH = ByteString[]
+
+function find_library{T<:String}(libnames::Vector{T})
+    for lib in libnames
+        libext = "$lib.$shlib_ext"
+        for p in DL_LOAD_PATH
+            if isfile(p,lib)
+                return lib
+            end
+            if isfile(p,libext)
+                return libext
+            end
+        end
+        p = dlopen_e(lib, RTLD_LAZY)
+        if p != C_NULL
+            dlclose(p)
+            return lib
+        end
+    end
+    return ""
+#    error("none of the libraries $libnames could be found! perhaps you need to rerun Pkg.runbuildscript?")
+end
 
 end

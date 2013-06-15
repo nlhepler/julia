@@ -54,6 +54,7 @@ static std::map<std::string, void*> libMap;
 
 int add_library_mapping(char *lib, void *hnd)
 {
+    JL_PUTS((char*)"WARNING: add_library_mapping is deprecated, use push!(Sys.DL_LOAD_PATH,\"/path/to/search\") instead.\n", JL_STDERR);
     if(libMap[lib] == NULL && hnd != NULL) {
         libMap[lib] = hnd;
         return 0;
