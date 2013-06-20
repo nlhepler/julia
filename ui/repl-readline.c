@@ -18,6 +18,7 @@
 */
 
 #include "repl.h"
+#include "wctype.h"
 #ifdef __WIN32__
 # define WIN32_LEAN_AND_MEAN
 # include <windows.h>
@@ -176,6 +177,53 @@ static int newline_callback(int count, int key)
     return 0;
 }
 
+static jl_value_t *repl_parse_input_line(const char *str) {
+    const char *p = str;
+    char c, run = 0;
+    while ((c = *p++)) {
+        if (iswspace(c))
+            continue;
+        if (run) {
+            size_t len = strlen(str);
+            char *run_str = alloca(len*2+strlen("run(``)")), *rs;
+            char cd = 0;
+            if (c == 'c' && p[0] == 'd' && (p[1] == 0 || iswspace(p[1]))) {
+                cd = 1;
+                p++;
+                while ((c = *p++) && iswspace(c)) { }
+                if (!c) {
+                    return jl_parse_input_line("cd()");
+                }
+            }
+            if (cd)
+                rs = strcpy(run_str, "cd(\"")+4;
+            else
+                rs = strcpy(run_str, "run(`")+5;
+            p--;
+            while ((c = *p++)) {
+                if ((cd && (c == '\\' || c == '$' || c == '"')) ||
+                    (!cd && c == '`')) {
+                    *rs++ = '\\';
+                }
+                *rs++ = c;
+            }
+            *rs++ = (cd ? '"' : '`');
+            *rs++ = ')';
+            *rs++ = 0;
+            //printf("\n%s\n",run_str);
+            return jl_parse_input_line(run_str);
+        }
+        else if (c == '?')
+            run = 1;
+        else
+            break;
+    }
+    if (run)
+        return jl_parse_input_line("");
+    else
+        return jl_parse_input_line(str);
+}
+
 static int return_callback(int count, int key)
 {
     static int consecutive_returns = 0;
@@ -185,7 +233,7 @@ static int return_callback(int count, int key)
     else
         consecutive_returns = 0;
     add_history_temporary(rl_line_buffer);
-    rl_ast = jl_parse_input_line(rl_line_buffer);
+    rl_ast = repl_parse_input_line(rl_line_buffer);
     rl_done = !rl_ast || !jl_is_expr(rl_ast) ||
         (((jl_expr_t*)rl_ast)->head != jl_continue_sym) ||
         consecutive_returns > 1;
@@ -386,7 +434,7 @@ void jl_input_line_callback(char *input)
     else if (!rl_ast) {
         // In vi mode, it's possible for this function to be called w/o a
         // previous call to return_callback.
-        rl_ast = jl_parse_input_line(rl_line_buffer);
+        rl_ast = repl_parse_input_line(rl_line_buffer);
     }
 
     if (rl_ast != NULL) {
