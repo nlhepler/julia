@@ -200,10 +200,29 @@ static jl_value_t *repl_parse_input_line(const char *str) {
             else
                 rs = strcpy(run_str, "run(`")+5;
             p--;
+            int in_interp = 0;
             while ((c = *p++)) {
-                if ((cd && (c == '\\' || c == '$' || c == '"')) ||
-                    (!cd && c == '`')) {
-                    *rs++ = '\\';
+                if (cd) {
+                    if (in_interp) {
+                        if (c == ')')
+                            in_interp--;
+                        else if (c == '(')
+                            in_interp++;
+                    }
+                    else {
+                        if (c == '$' && *p == '(') {
+                            in_interp = 1;
+                            *rs++ = '$';
+                            *rs++ = '(';
+                            p++;
+                            continue;
+                        }
+                        if (c == '\\' || c == '"')
+                            *rs++ = '\\';
+                    }
+                } else {
+                    if (c == '`')
+                        *rs++ = '\\';
                 }
                 *rs++ = c;
             }
